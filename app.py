@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File
 import uvicorn
+
 import tensorflow_cpu as tf
 import numpy as np
 from PIL import Image
@@ -84,4 +85,5 @@ async def predict(file: UploadFile = File(...)):
 @app.get("/")
 def home():
     return {"message": "Plant Disease API is running! (Model loads on first /predict call)"}
+
 
