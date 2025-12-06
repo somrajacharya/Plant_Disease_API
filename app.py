@@ -1,13 +1,12 @@
 from fastapi import FastAPI, UploadFile, File
 import uvicorn
-
-import tensorflow_cpu as tf
 import numpy as np
 from PIL import Image
 import io
 import json
 import os
 import gdown
+import tensorflow as tf
 
 # --- OPTIMIZATION: Suppress CUDA/GPU errors on Railway's CPU host ---
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -85,5 +84,6 @@ async def predict(file: UploadFile = File(...)):
 @app.get("/")
 def home():
     return {"message": "Plant Disease API is running! (Model loads on first /predict call)"}
+
 
 
