@@ -1,73 +1,87 @@
-from fastapi import FastAPI, UploadFile, File # (KEEP)
-# import uvicorn # Not needed if running via CMD
-# import tensorflow as tf # <-- COMMENT OUT
-# import numpy as np # <-- COMMENT OUT
-from PIL import Image # (KEEP)
-import io # (KEEP)
-# import json # <-- COMMENT OUT
-import os # (KEEP)
-# import gdown # <-- COMMENT OUT
+from fastapi import FastAPI, UploadFile, File
+import uvicorn
+import tensorflow as tf
+import numpy as np
+from PIL import Image
+import io
+import json
+import os
+import gdown
 
 # --- OPTIMIZATION: Suppress CUDA/GPU errors on Railway's CPU host ---
-# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+# These lines help prevent noisy/error logs on non-GPU environments
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 # -------------------------------------------------------------------
 
-# MODEL_PATH = "plant_disease_prediction_model.h5" # <-- COMMENT OUT
-# MODEL_URL = "https://drive.google.com/uc?id=1rKh-IElSdHTqax7XdfSdZTn-r8T_qWPf" # <-- COMMENT OUT
+MODEL_PATH = "plant_disease_prediction_model.h5"
+MODEL_URL = "https://drive.google.com/uc?id=1rKh-IElSdHTqax7XdfSdZTn-r8T_qWPf"
 
-# # Download model if it doesn't exist 
-# if not os.path.exists(MODEL_PATH): # <-- COMMENT OUT
-#     print("Downloading model from Google Drive...") # <-- COMMENT OUT
-#     gdown.download(MODEL_URL, MODEL_PATH, quiet=False) # <-- COMMENT OUT
+# Download model if it doesn't exist (Only runs once during startup/boot)
+if not os.path.exists(MODEL_PATH):
+    print("Downloading model from Google Drive...")
+    try:
+        gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+    except Exception as e:
+        print(f"ERROR: Failed to download model: {e}")
+        # Re-raise the exception to crash fast, so you see the error
+        raise
 
-# # Load the model (This runs ONCE when the container starts)
-# # model = tf.keras.models.load_model(MODEL_PATH, compile=False) # <-- COMMENT OUT
-# print("✨ Model loaded successfully. Starting API.") # <-- COMMENT OUT
+# Load the model (This runs ONCE when the container starts)
+try:
+    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+    print("✨ Model loaded successfully. Starting API.")
+except Exception as e:
+    print(f"FATAL ERROR: Failed to load model: {e}")
+    # Re-raise the exception to crash fast
+    raise
 
-app = FastAPI() # (KEEP)
 
-# Load disease details (Runs once at startup)
+app = FastAPI()
+
+# Load disease details (Using DUMMY DATA for now, to focus only on model crash)
+# The old code is commented out below:
 # with open("diseases.json", "r") as f:
 #     DISEASE_DATA = json.load(f)
 #     DISEASE_DATA = {int(k): v for k, v in DISEASE_DATA.items()}
-DISEASE_DATA = { # (KEEP)
-    0: {"name": "Test Healthy", "description": "This is a temporary placeholder to test the API server startup.", "cause": "", "solution": "", "prevention": ""} # (KEEP)
-} # (KEEP)
+DISEASE_DATA = {
+    0: {"name": "Test Healthy", "description": "Temp description", "cause": "Temp cause", "solution": "Temp solution", "prevention": "Temp prevention"},
+    # Add a few more index placeholders if your model output is large
+    1: {"name": "Placeholder 1", "description": "...", "cause": "...", "solution": "...", "prevention": "..."},
+    2: {"name": "Placeholder 2", "description": "...", "cause": "...", "solution": "...", "prevention": "..."}
+}
 
-IMG_SIZE = (224, 224) # (KEEP)
+IMG_SIZE = (224, 224) 
 
-def preprocess(img_bytes): # (KEEP)
-    img = Image.open(io.BytesIO(img_bytes)).convert("RGB") # (KEEP)
-    img = img.resize(IMG_SIZE) # (KEEP)
-    # img = np.array(img) / 255.0 # <-- COMMENT OUT (since numpy is gone)
-    # img = np.expand_dims(img, axis=0) # <-- COMMENT OUT
-    return "TEST_SUCCESS" # Return a simple string instead
+def preprocess(img_bytes):
+    img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    img = img.resize(IMG_SIZE)
+    img = np.array(img) / 255.0
+    img = np.expand_dims(img, axis=0)
+    return img
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)): # (KEEP)
-    # img_bytes = await file.read() # <-- COMMENT OUT
-    # img = preprocess(img_bytes) # <-- COMMENT OUT
+async def predict(file: UploadFile = File(...)):
+    img_bytes = await file.read()
+    img = preprocess(img_bytes)
 
-    # preds = model.predict(img)[0] # <-- COMMENT OUT
-    # class_index = int(np.argmax(preds)) # <-- COMMENT OUT
-    # confidence = float(np.max(preds)) # <-- COMMENT OUT
+    preds = model.predict(img)[0]
+    class_index = int(np.argmax(preds))
+    confidence = float(np.max(preds))
 
-    # info = DISEASE_DATA[class_index] # <-- COMMENT OUT
-    
-    # Return dummy data to ensure the server starts
-    info = DISEASE_DATA[0] 
+    # Safely get index, using 0 if model output index is not in dummy data
+    info = DISEASE_DATA.get(class_index, DISEASE_DATA[0]) 
 
-    return { # (KEEP)
-        "class_index": 0, # (KEEP)
-        "disease_name": info["name"], # (KEEP)
-        "description": info["description"], # (KEEP)
-        "cause": info["cause"], # (KEEP)
-        "solution": info["solution"], # (KEEP)
-        "prevention": info["prevention"], # (KEEP)
-        "confidence": 0.999 # (KEEP)
-    } # (KEEP)
+    return {
+        "class_index": class_index,
+        "disease_name": info["name"],
+        "description": info["description"],
+        "cause": info["cause"],
+        "solution": info["solution"],
+        "prevention": info["prevention"],
+        "confidence": confidence
+    }
 
 @app.get("/")
-def home(): # (KEEP)
-    return {"message": "Plant Disease API is running!"} # (KEEP)
+def home():
+    return {"message": "Plant Disease API is running!"}
