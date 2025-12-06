@@ -47,11 +47,10 @@ def load_model_once():
 app = FastAPI()
 
 # Using DUMMY DATA for now (we can fix diseases.json once the server runs)
-DISEASE_DATA = {
-    0: {"name": "Test Healthy", "description": "Temp description", "cause": "Temp cause", "solution": "Temp solution", "prevention": "Temp prevention"},
-    1: {"name": "Placeholder 1", "description": "...", "cause": "...", "solution": "...", "prevention": "..."},
-    2: {"name": "Placeholder 2", "description": "...", "cause": "...", "solution": "...", "prevention": "..."}
-}
+# Load disease details (Runs once at startup)
+with open("diseases.json", "r") as f:
+    DISEASE_DATA = json.load(f)
+    DISEASE_DATA = {int(k): v for k, v in DISEASE_DATA.items()}
 
 IMG_SIZE = (224, 224) 
 
@@ -89,3 +88,4 @@ async def predict(file: UploadFile = File(...)):
 @app.get("/")
 def home():
     return {"message": "Plant Disease API is running! (Model loads on first /predict call)"}
+
