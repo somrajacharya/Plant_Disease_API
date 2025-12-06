@@ -29,9 +29,12 @@ print("✨ Model loaded successfully. Starting API.") # <-- Added print for visi
 app = FastAPI()
 
 # Load disease details (Runs once at startup)
-with open("diseases.json", "r") as f:
-    DISEASE_DATA = json.load(f)
-    DISEASE_DATA = {int(k): v for k, v in DISEASE_DATA.items()}
+# with open("diseases.json", "r") as f:
+#     DISEASE_DATA = json.load(f)
+#     DISEASE_DATA = {int(k): v for k, v in DISEASE_DATA.items()}
+DISEASE_DATA = {
+    0: {"name": "Test Healthy", "description": "This is a temporary placeholder to test the API server startup.", "cause": "", "solution": "", "prevention": ""}
+}
 
 IMG_SIZE = (224, 224) 
 
@@ -69,3 +72,4 @@ def home():
 
 # --- REMOVED THE if __name__ == "__main__": BLOCK ---
 # We rely entirely on the Start Command in Railway Settings now.
+
