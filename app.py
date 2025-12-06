@@ -8,51 +8,28 @@ import json
 import os
 import gdown
 
-# --- OPTIMIZATION: Suppress CUDA/GPU errors on Railway's CPU host ---
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-# -------------------------------------------------------------------
-
 MODEL_PATH = "plant_disease_prediction_model.h5"
 MODEL_URL = "https://drive.google.com/uc?id=1rKh-IElSdHTqax7XdfSdZTn-r8T_qWPf"
 
-# --- DEFERRED LOADING SETUP ---
-# 1. model is initialized as None
-model = None 
+# Download model if it doesn't exist
+if not os.path.exists(MODEL_PATH):
+    print("Downloading model from Google Drive...")
+    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
 
-# 2. Function to handle download and load
-def load_model_once():
-    global model
-    if model is not None:
-        return model
-        
-    print("--- DEFERRED MODEL LOAD INITIATED ---")
+# Load the model
+model = tf.keras.models.load_model(MODEL_PATH, compile=False)
 
-    # Download model if it doesn't exist
-    if not os.path.exists(MODEL_PATH):
-        print("Downloading model from Google Drive...")
-        gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
-        
-    # Load the model inside the function
-    try:
-        model = tf.keras.models.load_model(MODEL_PATH, compile=False)
-        print("✨ Model loaded successfully (Deferred).")
-        return model
-    except Exception as e:
-        print(f"FATAL ERROR: Failed to load model: {e}")
-        raise # Still raise if it fails, but this happens AFTER API is running
-
-# ------------------------------
 
 app = FastAPI()
 
-# Using DUMMY DATA for now (we can fix diseases.json once the server runs)
-# Load disease details (Runs once at startup)
+# Load model
+
+# Load disease details
 with open("diseases.json", "r") as f:
     DISEASE_DATA = json.load(f)
     DISEASE_DATA = {int(k): v for k, v in DISEASE_DATA.items()}
 
-IMG_SIZE = (224, 224) 
+IMG_SIZE = (224, 224)  # change if your model uses different size
 
 def preprocess(img_bytes):
     img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
@@ -63,17 +40,14 @@ def preprocess(img_bytes):
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    # 3. Call the function to ensure the model is loaded here!
-    loaded_model = load_model_once() 
-
     img_bytes = await file.read()
     img = preprocess(img_bytes)
 
-    preds = loaded_model.predict(img)[0]
+    preds = model.predict(img)[0]
     class_index = int(np.argmax(preds))
     confidence = float(np.max(preds))
 
-    info = DISEASE_DATA.get(class_index, DISEASE_DATA[0]) 
+    info = DISEASE_DATA[class_index]
 
     return {
         "class_index": class_index,
@@ -87,5 +61,7 @@ async def predict(file: UploadFile = File(...)):
 
 @app.get("/")
 def home():
-    return {"message": "Plant Disease API is running! (Model loads on first /predict call)"}
+    return {"message": "Plant Disease API is running!"}
 
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
