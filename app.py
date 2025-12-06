@@ -9,7 +9,6 @@ import os
 import gdown
 
 # --- OPTIMIZATION: Suppress CUDA/GPU errors on Railway's CPU host ---
-# These lines help prevent noisy/error logs on non-GPU environments
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 # -------------------------------------------------------------------
@@ -17,36 +16,39 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 MODEL_PATH = "plant_disease_prediction_model.h5"
 MODEL_URL = "https://drive.google.com/uc?id=1rKh-IElSdHTqax7XdfSdZTn-r8T_qWPf"
 
-# Download model if it doesn't exist (Only runs once during startup/boot)
-if not os.path.exists(MODEL_PATH):
-    print("Downloading model from Google Drive...")
-    try:
+# --- DEFERRED LOADING SETUP ---
+# 1. model is initialized as None
+model = None 
+
+# 2. Function to handle download and load
+def load_model_once():
+    global model
+    if model is not None:
+        return model
+        
+    print("--- DEFERRED MODEL LOAD INITIATED ---")
+
+    # Download model if it doesn't exist
+    if not os.path.exists(MODEL_PATH):
+        print("Downloading model from Google Drive...")
         gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+        
+    # Load the model inside the function
+    try:
+        model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+        print("✨ Model loaded successfully (Deferred).")
+        return model
     except Exception as e:
-        print(f"ERROR: Failed to download model: {e}")
-        # Re-raise the exception to crash fast, so you see the error
-        raise
+        print(f"FATAL ERROR: Failed to load model: {e}")
+        raise # Still raise if it fails, but this happens AFTER API is running
 
-# Load the model (This runs ONCE when the container starts)
-try:
-    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
-    print("✨ Model loaded successfully. Starting API.")
-except Exception as e:
-    print(f"FATAL ERROR: Failed to load model: {e}")
-    # Re-raise the exception to crash fast
-    raise
-
+# ------------------------------
 
 app = FastAPI()
 
-# Load disease details (Using DUMMY DATA for now, to focus only on model crash)
-# The old code is commented out below:
-# with open("diseases.json", "r") as f:
-#     DISEASE_DATA = json.load(f)
-#     DISEASE_DATA = {int(k): v for k, v in DISEASE_DATA.items()}
+# Using DUMMY DATA for now (we can fix diseases.json once the server runs)
 DISEASE_DATA = {
     0: {"name": "Test Healthy", "description": "Temp description", "cause": "Temp cause", "solution": "Temp solution", "prevention": "Temp prevention"},
-    # Add a few more index placeholders if your model output is large
     1: {"name": "Placeholder 1", "description": "...", "cause": "...", "solution": "...", "prevention": "..."},
     2: {"name": "Placeholder 2", "description": "...", "cause": "...", "solution": "...", "prevention": "..."}
 }
@@ -62,14 +64,16 @@ def preprocess(img_bytes):
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
+    # 3. Call the function to ensure the model is loaded here!
+    loaded_model = load_model_once() 
+
     img_bytes = await file.read()
     img = preprocess(img_bytes)
 
-    preds = model.predict(img)[0]
+    preds = loaded_model.predict(img)[0]
     class_index = int(np.argmax(preds))
     confidence = float(np.max(preds))
 
-    # Safely get index, using 0 if model output index is not in dummy data
     info = DISEASE_DATA.get(class_index, DISEASE_DATA[0]) 
 
     return {
@@ -84,4 +88,4 @@ async def predict(file: UploadFile = File(...)):
 
 @app.get("/")
 def home():
-    return {"message": "Plant Disease API is running!"}
+    return {"message": "Plant Disease API is running! (Model loads on first /predict call)"}
