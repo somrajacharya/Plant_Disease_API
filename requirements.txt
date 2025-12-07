@@ -1,10 +1,11 @@
 fastapi
-uvicorn
+uvicorn[standard]
 numpy
 pillow
 gdown
 python-multipart
 tensorflow
+
 
 
 
